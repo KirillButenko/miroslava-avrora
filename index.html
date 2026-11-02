@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pet_1 — задачи</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <p class="eyebrow">Pet_1</p>
+        <h1>Мои задачи</h1>
+        <p class="subtitle">Добавляй дела, отмечай готовые — список сохранится в браузере.</p>
+      </header>
+
+      <form id="task-form" class="task-form" autocomplete="off">
+        <label class="sr-only" for="task-input">Новая задача</label>
+        <input
+          id="task-input"
+          name="title"
+          type="text"
+          placeholder="Что нужно сделать?"
+          maxlength="120"
+          required
+        />
+        <button type="submit">Добавить</button>
+      </form>
+
+      <p id="status" class="status" aria-live="polite"></p>
+      <ul id="task-list" class="task-list"></ul>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -151,6 +151,12 @@ body {
   background: var(--accent-hover);
 }
 
+.sync-note {
+  margin: 10px 4px 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .last-feed {
   margin-top: auto;
   padding: 16px 16px 14px;
@@ -182,6 +188,72 @@ body {
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.dyn {
+  margin-top: 22px;
+  padding: 22px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+}
+
+.dyn summary {
+  cursor: pointer;
+  font-family: Georgia, "Iowan Old Style", Palatino, serif;
+  font-size: 1.6rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+.dyn summary::-webkit-details-marker {
+  display: none;
+}
+
+.dyn summary::after {
+  content: "+";
+  float: right;
+  color: var(--muted);
+}
+
+.dyn[open] summary {
+  margin-bottom: 12px;
+}
+
+.dyn[open] summary::after {
+  content: "–";
+}
+
+.share-card h3 {
+  margin: 0 0 10px;
+}
+
+.share-card p {
+  margin: 6px 0 0;
+}
+
+.share-bar {
+  display: flex;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #efe7dc;
+}
+
+.share-bar .mira.milk {
+  background: var(--mira-ink);
+}
+
+.share-bar .avrora.milk {
+  background: var(--avrora-ink);
+}
+
+.share-bar .mira.formula {
+  background: #e4d2b6;
+}
+
+.share-bar .avrora.formula {
+  background: #f0c3ce;
 }
 
 .overlay {

@@ -102,8 +102,89 @@ function loadState() {
   }
 }
 
+const DB_URL = "https://sinwpqyjjsocceybwbsq.supabase.co/rest/v1/diary";
+const DB_KEY = "sb_publishable_nsRahA_jkPjNk6SHAsKgSg_-IDmywa9";
+const dbHeaders = {
+  apikey: DB_KEY,
+  Authorization: `Bearer ${DB_KEY}`,
+  "Content-Type": "application/json",
+};
+let syncing = false;
+let syncAgain = false;
+let syncNote = "Подключаю базу…";
+
+async function pullCloud() {
+  const res = await fetch(`${DB_URL}?id=eq.1&select=payload`, { headers: dbHeaders });
+  if (!res.ok) throw new Error("cloud");
+  const rows = await res.json();
+  return rows[0]?.payload ?? null;
+}
+
+async function pushCloud(data) {
+  const res = await fetch(`${DB_URL}?id=eq.1`, {
+    method: "PATCH",
+    headers: { ...dbHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({ payload: data }),
+  });
+  if (!res.ok) throw new Error("cloud");
+  const rows = await res.json();
+  if (rows.length) return;
+  const ins = await fetch(DB_URL, {
+    method: "POST",
+    headers: dbHeaders,
+    body: JSON.stringify({ id: 1, payload: data }),
+  });
+  if (!ins.ok) throw new Error("cloud");
+}
+
+function mergeState(local, remote) {
+  const base = defaultState();
+  const union = (left, right) => {
+    const map = new Map();
+    for (const item of [...(right || []), ...(left || [])]) {
+      if (item?.id) map.set(item.id, item);
+    }
+    return [...map.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  };
+  base.feedings = union(local.feedings, remote?.feedings);
+  base.weights = union(local.weights, remote?.weights);
+  base.stages = { ...(remote?.stages || {}), ...(local.stages || {}) };
+  for (const child of CHILDREN) {
+    const profile = emptyProfile(child);
+    const fromRemote = remote?.profiles?.[child.id] || {};
+    const fromLocal = local.profiles?.[child.id] || {};
+    for (const key of Object.keys(profile)) profile[key] = fromLocal[key] || fromRemote[key] || profile[key];
+    base.profiles[child.id] = profile;
+  }
+  return base;
+}
+
+async function syncShared() {
+  if (syncing) {
+    syncAgain = true;
+    return;
+  }
+  syncing = true;
+  try {
+    do {
+      syncAgain = false;
+      state = mergeState(state, await pullCloud());
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      await pushCloud(state);
+    } while (syncAgain);
+    syncNote = "База подключена";
+    if (!feedOpen) render();
+  } catch {
+    syncNote = "Связи нет: пока только этот телефон";
+    if (!feedOpen) render();
+  } finally {
+    syncing = false;
+  }
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  syncShared();
 }
 
 function childById(id) {
@@ -224,6 +305,140 @@ function signedGrams(n) {
   return `${n} г`;
 }
 
+function childFeed(item, childId) {
+  if (item.childId === childId) return item;
+  if (item[childId]?.ml != null) return { ...item[childId], at: item.at, kind: item[childId].kind || item.kind };
+  return null;
+}
+
+function feedShare(childId) {
+  let milk = 0;
+  let formula = 0;
+  for (const item of state.feedings) {
+    const rec = childFeed(item, childId);
+    if (!rec) continue;
+    const ml = Number(rec.ml) || 0;
+    if (rec.kind === "formula") formula += ml;
+    else milk += ml;
+  }
+  const total = milk + formula;
+  return {
+    milk,
+    formula,
+    milkPct: total ? Math.round((milk / total) * 100) : 0,
+    formulaPct: total ? Math.round((formula / total) * 100) : 0,
+    total,
+  };
+}
+
+function recentDays(count) {
+  const days = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - i);
+    days.push(date);
+  }
+  return days;
+}
+
+function dynamicsChart() {
+  const days = recentDays(14);
+  const keys = days.map(dayKey);
+  const series = CHILDREN.map((child) => {
+    const weights = state.weights
+      .filter((item) => item.childId === child.id)
+      .sort((a, b) => a.at.localeCompare(b.at));
+    const byDay = {};
+    for (const item of weights) byDay[dayKey(item.at)] = item.grams;
+    const start = days[0].getTime();
+    let known = null;
+    for (const item of weights) {
+      if (new Date(item.at).getTime() < start) known = item.grams;
+    }
+    const grams = keys.map((key) => {
+      if (byDay[key] != null) known = byDay[key];
+      return byDay[key] != null ? byDay[key] : known;
+    });
+    const first = grams.findIndex((value) => value != null);
+    const ml = keys.map((key) =>
+      state.feedings.reduce((sum, item) => {
+        const rec = childFeed(item, child.id);
+        return rec && dayKey(rec.at) === key ? sum + (Number(rec.ml) || 0) : sum;
+      }, 0)
+    );
+    return { child, grams, ml, first };
+  });
+  const gramValues = series.flatMap((item) => item.grams.filter((value) => value != null));
+  const mlValues = series.flatMap((item) => item.ml);
+  if (!gramValues.length && mlValues.every((value) => value === 0)) {
+    return `<p class="empty">Пока нет веса и кормлений за 14 дней.</p>`;
+  }
+  const width = 840;
+  const height = 250;
+  const pad = { l: 46, r: 46, t: 16, b: 28 };
+  const minG = Math.min(...(gramValues.length ? gramValues : [0])) - 40;
+  const maxG = Math.max(...(gramValues.length ? gramValues : [1])) + 40;
+  const maxM = Math.max(40, ...mlValues);
+  const x = (index) => pad.l + (index / (days.length - 1)) * (width - pad.l - pad.r);
+  const yG = (value) => height - pad.b - ((value - minG) / (maxG - minG)) * (height - pad.t - pad.b);
+  const yM = (value) => height - pad.b - (value / maxM) * (height - pad.t - pad.b);
+  const lines = series
+    .map(({ child, grams, first }) => {
+      if (first < 0) return "";
+      const points = grams
+        .map((value, index) => (index >= first && value != null ? `${x(index)},${yG(value)}` : ""))
+        .filter(Boolean)
+        .join(" ");
+      return `<polyline fill="none" stroke="${child.color}" stroke-width="3" points="${points}"></polyline>`;
+    })
+    .join("");
+  const bars = series
+    .map(({ child, ml }) =>
+      ml
+        .map((value, index) => {
+          if (!value) return "";
+          const barH = height - pad.b - yM(value);
+          const offset = child.id === "miroslava" ? -7 : 1;
+          return `<rect x="${x(index) + offset}" y="${yM(value)}" width="6" height="${barH}" rx="2" fill="${child.color}" opacity="0.35"></rect>`;
+        })
+        .join("")
+    )
+    .join("");
+  const labels = days
+    .map((day, index) =>
+      index % 2 === 0
+        ? `<text x="${x(index)}" y="${height - 8}" font-size="11" text-anchor="middle" fill="#6f645a">${day.getDate()}.${day.getMonth() + 1}</text>`
+        : ""
+    )
+    .join("");
+  return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Вес и миллилитры кормления">
+    <line x1="${pad.l}" y1="${height - pad.b}" x2="${width - pad.r}" y2="${height - pad.b}" stroke="#e6d9c8"></line>
+    <text x="4" y="24" font-size="12" fill="#6f645a">${Math.round(maxG)} г</text>
+    <text x="${width - 42}" y="24" font-size="12" fill="#6f645a">${Math.round(maxM)} мл</text>
+    ${bars}${lines}${labels}
+  </svg>`;
+}
+
+function feedShareBlock() {
+  return `<div class="grid">${CHILDREN.map((child) => {
+    const share = feedShare(child.id);
+    const tone = child.id === "miroslava" ? "mira" : "avrora";
+    if (!share.total) {
+      return `<article class="card share-card"><h3>${child.name}</h3><p class="empty">Нет миллилитров.</p></article>`;
+    }
+    return `<article class="card share-card">
+      <h3>${child.name}</h3>
+      <div class="share-bar" aria-label="Молоко ${share.milkPct}%, смесь ${share.formulaPct}%">
+        <span class="${tone} milk" style="width:${share.milkPct}%"></span>
+        <span class="${tone} formula" style="width:${share.formulaPct}%"></span>
+      </div>
+      <p>Молоко ${share.milkPct}% · ${share.milk} мл</p>
+      <p>Смесь ${share.formulaPct}% · ${share.formula} мл</p>
+    </article>`;
+  }).join("")}</div>`;
+}
+
 function renderToday() {
   ui.panels.today.innerHTML = `
     <div class="grid home-grid">
@@ -243,6 +458,19 @@ function renderToday() {
       }).join("")}
     </div>
     <button type="button" class="btn primary feed-one" data-open-feed>Записать кормление</button>
+    <p class="sync-note">${syncNote}</p>
+    <details class="dyn">
+      <summary>Динамика веса и кормления</summary>
+      <p class="legend">
+        ${CHILDREN.map((child) => `<span><i class="dot" style="background:${child.color}"></i>${child.name}: линия — вес, столбик — мл</span>`).join("")}
+      </p>
+      ${dynamicsChart()}
+    </details>
+    <details class="dyn">
+      <summary>Динамика кормления</summary>
+      <p class="muted">Доля молока и смеси по всем записанным миллилитрам.</p>
+      ${feedShareBlock()}
+    </details>
     ${
       feedOpen
         ? `<div class="overlay">
@@ -540,3 +768,7 @@ document.body.addEventListener("submit", (event) => {
 });
 
 render();
+syncShared();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") syncShared();
+});

@@ -8,37 +8,8 @@
   </head>
   <body>
     <div class="page">
-      <header class="hero">
-        <p class="eyebrow">Семейный дневник</p>
-        <h1>Мирослава и Аврора</h1>
-        <p class="lede">
-          Вес, каждое кормление и этапы месяца. Всё остаётся в этом браузере.
-        </p>
-        <div class="hero-actions">
-          <label class="birth">
-            Дата рождения
-            <input id="birth-date" type="date" required />
-          </label>
-          <div class="share">
-            <button type="button" class="btn" data-export>Скачать данные</button>
-            <label class="btn">
-              Загрузить данные
-              <input id="import-file" class="sr-only" type="file" accept="application/json" />
-            </label>
-          </div>
-        </div>
-      </header>
-
-      <nav class="tabs" aria-label="Разделы">
-        <button type="button" class="tab is-active" data-tab="today">Сегодня</button>
-        <button type="button" class="tab" data-tab="feedings">Кормления</button>
-        <button type="button" class="tab" data-tab="weight">Вес</button>
-        <button type="button" class="tab" data-tab="stages">Этапы</button>
-        <button type="button" class="tab" data-tab="charts">Графики</button>
-      </nav>
-
       <section id="panel-today" class="panel is-active"></section>
-      <section id="panel-feedings" class="panel" hidden></section>
+      <section id="panel-girls" class="panel" hidden></section>
       <section id="panel-weight" class="panel" hidden></section>
       <section id="panel-stages" class="panel" hidden></section>
       <section id="panel-charts" class="panel" hidden></section>

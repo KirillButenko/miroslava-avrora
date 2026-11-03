@@ -1,15 +1,7 @@
 const STORAGE_KEY = "pet1-daughters";
 const CHILDREN = [
-  { id: "miroslava", name: "Мирослава", short: "Мира", color: "#c45c26" },
-  { id: "avrora", name: "Аврора", short: "Аврора", color: "#3f7a6b" },
-];
-
-const FEED_TYPES = [
-  { id: "breast-left", label: "Грудь слева", kind: "breast" },
-  { id: "breast-right", label: "Грудь справа", kind: "breast" },
-  { id: "breast-both", label: "Обе груди", kind: "breast" },
-  { id: "formula", label: "Смесь", kind: "bottle" },
-  { id: "pumped", label: "Сцеженное молоко", kind: "bottle" },
+  { id: "miroslava", name: "Мирослава", color: "#c4a882", bornAt: "2026-09-29T10:38" },
+  { id: "avrora", name: "Аврора", color: "#e8a0b0", bornAt: "2026-09-29T10:39" },
 ];
 
 const STAGES = [
@@ -43,26 +35,6 @@ const STAGES = [
       { id: "hands-open", title: "Чаще раскрывает ладошки", hint: "Кулачки уже не всё время сжаты." },
     ],
   },
-  {
-    month: 4,
-    title: "Четвёртый месяц",
-    items: [
-      { id: "laugh", title: "Смеётся в голос", hint: "На игры, щекотку, лица." },
-      { id: "grasp", title: "Захватывает игрушку", hint: "Держит и тянет в рот." },
-      { id: "roll-start", title: "Пробует переворот", hint: "Часто сначала с живота на спину." },
-      { id: "sounds-dialog", title: "«Отвечает» звуками", hint: "Диалог гулением." },
-    ],
-  },
-  {
-    month: 6,
-    title: "Полгода",
-    items: [
-      { id: "sit-support", title: "Сидит с поддержкой", hint: "Спинка ещё может уставать." },
-      { id: "transfer", title: "Перекладывает игрушку из руки в руку", hint: "Двуручные игры." },
-      { id: "babble", title: "Лепет: ба-ба, ма-ма", hint: "Повтор слогов, ещё без смысла." },
-      { id: "roll-both", title: "Переворачивается в обе стороны", hint: "Спина ↔ живот." },
-    ],
-  },
 ];
 
 const MARKS = [
@@ -72,11 +44,10 @@ const MARKS = [
 ];
 
 const ui = {
-  birth: document.querySelector("#birth-date"),
   tabs: [...document.querySelectorAll(".tab")],
   panels: {
     today: document.querySelector("#panel-today"),
-    feedings: document.querySelector("#panel-feedings"),
+    girls: document.querySelector("#panel-girls"),
     weight: document.querySelector("#panel-weight"),
     stages: document.querySelector("#panel-stages"),
     charts: document.querySelector("#panel-charts"),
@@ -86,10 +57,26 @@ const ui = {
 let state = loadState();
 let tab = "today";
 let childFilter = "all";
+let feedOpen = null;
+
+function emptyProfile(child) {
+  return {
+    bornAt: child.bornAt,
+    birthGrams: "",
+    birthHeight: "",
+    height: "",
+    headCm: "",
+    clothes: "",
+    milkNote: "",
+    vitaminD: "",
+    nextVisit: "",
+    notes: "",
+  };
+}
 
 function defaultState() {
   return {
-    birthDate: "2026-10-02",
+    profiles: Object.fromEntries(CHILDREN.map((child) => [child.id, emptyProfile(child)])),
     feedings: [],
     weights: [],
     stages: {},
@@ -97,11 +84,21 @@ function defaultState() {
 }
 
 function loadState() {
+  const base = defaultState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...defaultState(), ...JSON.parse(raw) } : defaultState();
+    if (!raw) return base;
+    const saved = JSON.parse(raw);
+    base.feedings = saved.feedings || [];
+    base.weights = saved.weights || [];
+    base.stages = saved.stages || {};
+    for (const child of CHILDREN) {
+      base.profiles[child.id] = { ...emptyProfile(child), ...(saved.profiles?.[child.id] || {}) };
+      if (!base.profiles[child.id].bornAt) base.profiles[child.id].bornAt = child.bornAt;
+    }
+    return base;
   } catch {
-    return defaultState();
+    return base;
   }
 }
 
@@ -113,20 +110,15 @@ function childById(id) {
   return CHILDREN.find((child) => child.id === id);
 }
 
-function feedLabel(id) {
-  return FEED_TYPES.find((item) => item.id === id)?.label ?? id;
-}
-
-function ageText(fromDate) {
-  const start = new Date(`${fromDate}T00:00:00`);
-  if (Number.isNaN(start.getTime())) return "укажите дату рождения";
-  const now = new Date();
-  let days = Math.floor((now - start) / 86400000);
+function ageText(bornAt) {
+  const start = new Date(bornAt);
+  if (Number.isNaN(start.getTime())) return "нет даты";
+  const days = Math.floor((Date.now() - start) / 86400000);
   if (days < 0) return "дата в будущем";
   const months = Math.floor(days / 30.4375);
-  days = Math.round(days - months * 30.4375);
-  if (months === 0) return `${days} дн.`;
-  return `${months} мес. ${days} дн.`;
+  const rest = Math.round(days - months * 30.4375);
+  if (months <= 0) return `${days} дн.`;
+  return `${months} мес. ${rest} дн.`;
 }
 
 function localDateTimeValue(date = new Date()) {
@@ -141,8 +133,7 @@ function dayKey(value) {
 }
 
 function formatWhen(iso) {
-  const date = new Date(iso);
-  return date.toLocaleString("ru-RU", {
+  return new Date(iso).toLocaleString("ru-RU", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -154,11 +145,46 @@ function lastOf(list, childId) {
   return list.filter((item) => item.childId === childId).sort((a, b) => b.at.localeCompare(a.at))[0];
 }
 
+function lastFeed(childId) {
+  let best = null;
+  for (const item of state.feedings) {
+    let rec = null;
+    if (item.childId === childId) rec = item;
+    else if (item[childId]?.ml != null) rec = { ...item[childId], at: item.at, kind: item.kind };
+    if (rec && (!best || rec.at > best.at)) best = rec;
+  }
+  return best;
+}
+
+function feedBlock(feed) {
+  if (!feed) return `<p class="feed-empty">Ещё не записывали</p>`;
+  const kind = feed.kind === "formula" ? "Смесь" : "Молоко";
+  const bits = [
+    feed.ml != null ? `${feed.ml} мл` : "",
+    feed.mood ? `настроение ${feed.mood}/10` : "",
+    feed.slept === true ? "спала" : feed.slept === false ? "не спала" : "",
+  ].filter(Boolean);
+  return `<p class="feed-when">${formatWhen(feed.at)}</p><p class="feed-meta">${[kind, ...bits].join(" · ")}</p>`;
+}
+
+function weightGain(childId) {
+  const items = state.weights.filter((item) => item.childId === childId).sort((a, b) => a.at.localeCompare(b.at));
+  if (!items.length) return { latest: null, delta: null };
+  const latest = items[items.length - 1];
+  const target = new Date(latest.at).getTime() - 14 * 86400000;
+  let ref = items[0];
+  for (const item of items) {
+    if (new Date(item.at).getTime() <= target) ref = item;
+  }
+  if (ref === latest) return { latest, delta: null };
+  return { latest, delta: latest.grams - ref.grams, from: ref };
+}
+
 function filtered(list) {
   return childFilter === "all" ? list : list.filter((item) => item.childId === childFilter);
 }
 
-function childSelect(selected, name = "childId") {
+function childSelect(selected) {
   return CHILDREN.map(
     (child) => `<option value="${child.id}" ${child.id === selected ? "selected" : ""}>${child.name}</option>`
   ).join("");
@@ -186,95 +212,125 @@ function setTab(next) {
 }
 
 function render() {
-  ui.birth.value = state.birthDate;
   if (tab === "today") renderToday();
-  if (tab === "feedings") renderFeedings();
+  if (tab === "girls") renderGirls();
   if (tab === "weight") renderWeight();
   if (tab === "stages") renderStages();
   if (tab === "charts") renderCharts();
 }
 
+function signedGrams(n) {
+  if (n > 0) return `+${n} г`;
+  return `${n} г`;
+}
+
 function renderToday() {
   ui.panels.today.innerHTML = `
-    <div class="grid">
+    <div class="grid home-grid">
       ${CHILDREN.map((child) => {
-        const feed = lastOf(state.feedings, child.id);
-        const weight = lastOf(state.weights, child.id);
+        const profile = state.profiles[child.id];
+        const tone = child.id === "miroslava" ? "mira" : "avrora";
         return `
-          <article class="card">
-            <p class="tag ${child.id === "miroslava" ? "mira" : "avrora"}">${child.name}</p>
-            <h2>${ageText(state.birthDate)}</h2>
-            <p class="muted">Последнее кормление: ${feed ? `${formatWhen(feed.at)} · ${feedLabel(feed.type)}` : "ещё не записывали"}</p>
-            <p class="muted">Вес: ${weight ? `${weight.grams} г · ${formatWhen(weight.at)}` : "ещё не записывали"}</p>
+          <article class="card girl-card ${tone}">
+            <h2>${child.name}</h2>
+            <p class="age">${ageText(profile.bornAt)}</p>
+            <div class="last-feed">
+              <p class="last-feed-label">Последнее кормление</p>
+              ${feedBlock(lastFeed(child.id))}
+            </div>
           </article>
         `;
       }).join("")}
     </div>
-    <form class="form" data-quick-feed>
-      <label>Кого кормили
-        <select name="childId">${childSelect("miroslava")}</select>
-      </label>
-      <label>Чем
-        <select name="type">${FEED_TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("")}</select>
-      </label>
-      <label>Минуты (грудь)
-        <input name="minutes" type="number" min="0" max="90" placeholder="15" />
-      </label>
-      <label>Миллилитры (бутылочка)
-        <input name="ml" type="number" min="0" max="300" placeholder="90" />
-      </label>
-      <div class="form-actions wide">
-        <button class="btn primary" type="submit">Записать кормление сейчас</button>
-      </div>
-    </form>
+    <button type="button" class="btn primary feed-one" data-open-feed>Записать кормление</button>
+    ${
+      feedOpen
+        ? `<div class="overlay">
+            <form class="card feed-modal" data-one-feed>
+              <h2>Кормление</h2>
+              <div class="form">
+                <label>Кто
+                  <select name="childId">${childSelect("miroslava")}</select>
+                </label>
+                <label>Когда
+                  <input name="at" type="datetime-local" value="${localDateTimeValue()}" required />
+                </label>
+                <label>Еда
+                  <select name="kind">
+                    <option value="milk">Молоко</option>
+                    <option value="formula">Смесь</option>
+                  </select>
+                </label>
+                <label>Мл
+                  <input name="ml" type="number" min="0" max="300" required />
+                </label>
+                <label>Поведение 1–10
+                  <input name="mood" type="number" min="1" max="10" value="7" required />
+                </label>
+                <label class="check wide">
+                  <input name="slept" type="checkbox" />
+                  Спала между кормлениями
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn primary" type="submit">Сохранить</button>
+                <button class="btn ghost" type="button" data-close-feed>Закрыть</button>
+              </div>
+            </form>
+          </div>`
+        : ""
+    }
   `;
 }
 
-function renderFeedings() {
-  const items = filtered(state.feedings).sort((a, b) => b.at.localeCompare(a.at));
-  ui.panels.feedings.innerHTML = `
-    <div class="marks">${childChips()}</div>
-    <form class="form" data-feed-form>
-      <label>Кто
-        <select name="childId">${childSelect(childFilter === "all" ? "miroslava" : childFilter)}</select>
-      </label>
-      <label>Когда
-        <input name="at" type="datetime-local" value="${localDateTimeValue()}" required />
-      </label>
-      <label>Тип
-        <select name="type">${FEED_TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("")}</select>
-      </label>
-      <label>Минуты
-        <input name="minutes" type="number" min="0" max="90" />
-      </label>
-      <label>Миллилитры
-        <input name="ml" type="number" min="0" max="300" />
-      </label>
-      <label>Заметка
-        <input name="note" maxlength="140" placeholder="Как ела, срыгнула, заснула..." />
-      </label>
-      <div class="form-actions wide">
-        <button class="btn primary" type="submit">Сохранить кормление</button>
-      </div>
-    </form>
-    ${
-      items.length
-        ? `<ul class="list">${items
-            .map((item) => {
-              const child = childById(item.childId);
-              const extra = item.minutes ? `${item.minutes} мин` : item.ml ? `${item.ml} мл` : "";
-              return `<li class="row">
-                <div>
-                  <span class="tag ${child.id === "miroslava" ? "mira" : "avrora"}">${child.name}</span>
-                  <strong>${feedLabel(item.type)}</strong>
-                  <p class="muted">${formatWhen(item.at)}${extra ? ` · ${extra}` : ""}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</p>
-                </div>
-                <button class="btn ghost" data-delete-feed="${item.id}" type="button">Удалить</button>
-              </li>`;
-            })
-            .join("")}</ul>`
-        : `<p class="empty">Пока нет кормлений. Запишите первое — так проще держать ритм двоих.</p>`
-    }
+function renderGirls() {
+  ui.panels.girls.innerHTML = `
+    <div class="grid">
+      ${CHILDREN.map((child) => {
+        const p = state.profiles[child.id];
+        const gain = weightGain(child.id);
+        return `
+          <form class="card" data-profile="${child.id}">
+            <p class="tag ${child.id === "miroslava" ? "mira" : "avrora"}">${child.name}</p>
+            <p class="stat">${ageText(p.bornAt)}</p>
+            <p class="muted">Сейчас: ${gain.latest ? `${gain.latest.grams} г` : "вес не записан"}</p>
+            <div class="form">
+              <label>Дата и время рождения
+                <input name="bornAt" type="datetime-local" value="${p.bornAt}" required />
+              </label>
+              <label>Вес при рождении, г
+                <input name="birthGrams" type="number" min="1000" max="6000" value="${p.birthGrams}" />
+              </label>
+              <label>Рост при рождении, см
+                <input name="birthHeight" type="number" min="30" max="70" step="0.1" value="${p.birthHeight}" />
+              </label>
+              <label>Рост сейчас, см
+                <input name="height" type="number" min="30" max="90" step="0.1" value="${p.height}" />
+              </label>
+              <label>Голова, см
+                <input name="headCm" type="number" min="25" max="55" step="0.1" value="${p.headCm}" />
+              </label>
+              <label>Размер одежды
+                <input name="clothes" value="${escapeHtml(String(p.clothes || ""))}" placeholder="56 / 62" />
+              </label>
+              <label>Смесь / молоко
+                <input name="milkNote" value="${escapeHtml(String(p.milkNote || ""))}" placeholder="какая смесь, как ест" />
+              </label>
+              <label>Витамин D
+                <input name="vitaminD" value="${escapeHtml(String(p.vitaminD || ""))}" placeholder="капля утром" />
+              </label>
+              <label>Следующий осмотр
+                <input name="nextVisit" type="date" value="${p.nextVisit || ""}" />
+              </label>
+              <label class="wide">Заметки
+                <textarea name="notes" rows="3">${escapeHtml(String(p.notes || ""))}</textarea>
+              </label>
+            </div>
+            <button class="btn primary" type="submit">Сохранить карточку</button>
+          </form>
+        `;
+      }).join("")}
+    </div>
   `;
 }
 
@@ -290,7 +346,7 @@ function renderWeight() {
         <input name="at" type="datetime-local" value="${localDateTimeValue()}" required />
       </label>
       <label>Вес, граммы
-        <input name="grams" type="number" min="1500" max="12000" step="5" required placeholder="4200" />
+        <input name="grams" type="number" min="1500" max="12000" step="5" required />
       </label>
       <div class="form-actions">
         <button class="btn primary" type="submit">Сохранить вес</button>
@@ -311,22 +367,22 @@ function renderWeight() {
               </li>`;
             })
             .join("")}</ul>`
-        : `<p class="empty">Добавьте взвешивание. Для месяца удобно раз в несколько дней в одно и то же время.</p>`
+        : `<p class="empty">Добавьте взвешивание — на старте появится рост за 2 недели.</p>`
     }
   `;
 }
 
 function renderStages() {
-  const monthNow = Math.max(1, Math.floor((Date.now() - new Date(`${state.birthDate}T00:00:00`)) / (30.4375 * 86400000)) + 1);
+  const born = state.profiles.miroslava.bornAt;
+  const monthNow = Math.max(1, Math.floor((Date.now() - new Date(born)) / (30.4375 * 86400000)) + 1);
   ui.panels.stages.innerHTML = `
-    <p class="muted">Отмечайте, как идёт этап у каждой. Это ориентиры, а не диагноз.</p>
+    <p class="muted">Ориентиры, не диагноз.</p>
     ${STAGES.map((group) => {
       const current = group.month === monthNow;
       return `
         <section class="stage">
           <div class="stage-head">
             <h2 class="section-title">${group.title}${current ? " · сейчас" : ""}</h2>
-            <span class="muted">${group.month} мес.</span>
           </div>
           ${group.items
             .map(
@@ -353,7 +409,6 @@ function renderStages() {
         </section>
       `;
     }).join("")}
-    <p class="disclaimer muted">Если что-то беспокоит, сверяйтесь с педиатром. Здесь только ваш семейный дневник.</p>
   `;
 }
 
@@ -361,22 +416,13 @@ function renderCharts() {
   ui.panels.charts.innerHTML = `
     <article class="card">
       <h2>Вес</h2>
-      <p class="legend">
-        ${CHILDREN.map((c) => `<span><i class="dot" style="background:${c.color}"></i>${c.name}</span>`).join("")}
-      </p>
       ${drawLineChart(state.weights)}
-    </article>
-    <article class="card" style="margin-top:16px">
-      <h2>Кормления за 14 дней</h2>
-      ${drawBarChart(state.feedings)}
     </article>
   `;
 }
 
 function drawLineChart(weights) {
-  if (weights.length < 2) {
-    return `<p class="empty">Нужно хотя бы два взвешивания, чтобы появилась линия.</p>`;
-  }
+  if (weights.length < 2) return `<p class="empty">Нужно два взвешивания.</p>`;
   const width = 840;
   const height = 240;
   const pad = { l: 44, r: 16, t: 16, b: 28 };
@@ -391,100 +437,28 @@ function drawLineChart(weights) {
   const y = (g) => height - pad.b - ((g - minY) / Math.max(maxY - minY, 1)) * (height - pad.t - pad.b);
   const polylines = CHILDREN.map((child) => {
     const series = points.filter((p) => p.childId === child.id);
-    if (series.length === 0) return "";
+    if (!series.length) return "";
     const d = series.map((p) => `${x(new Date(p.at).getTime())},${y(p.grams)}`).join(" ");
     const dots = series.map((p) => `<circle cx="${x(new Date(p.at).getTime())}" cy="${y(p.grams)}" r="4" fill="${child.color}"></circle>`).join("");
     return `<polyline fill="none" stroke="${child.color}" stroke-width="3" points="${d}"></polyline>${dots}`;
   }).join("");
-  return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="График веса">
-    <line x1="${pad.l}" y1="${height - pad.b}" x2="${width - pad.r}" y2="${height - pad.b}" stroke="#e6d9c8"></line>
-    <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${height - pad.b}" stroke="#e6d9c8"></line>
-    <text x="8" y="${pad.t + 8}" font-size="12" fill="#6f645a">${Math.round(maxY)} г</text>
-    <text x="8" y="${height - pad.b}" font-size="12" fill="#6f645a">${Math.round(minY)} г</text>
-    ${polylines}
-  </svg>`;
-}
-
-function drawBarChart(feedings) {
-  const days = [];
-  for (let i = 13; i >= 0; i -= 1) {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - i);
-    days.push(date);
-  }
-  const width = 840;
-  const height = 240;
-  const pad = { l: 36, r: 12, t: 16, b: 36 };
-  const counts = days.map((day) => {
-    const key = dayKey(day);
-    return {
-      label: day.toLocaleDateString("ru-RU", { day: "numeric", month: "numeric" }),
-      mira: feedings.filter((f) => f.childId === "miroslava" && dayKey(f.at) === key).length,
-      avrora: feedings.filter((f) => f.childId === "avrora" && dayKey(f.at) === key).length,
-    };
-  });
-  const max = Math.max(1, ...counts.flatMap((c) => [c.mira, c.avrora]));
-  const groupW = (width - pad.l - pad.r) / days.length;
-  const bars = counts
-    .map((c, i) => {
-      const x = pad.l + i * groupW;
-      const h1 = (c.mira / max) * (height - pad.t - pad.b);
-      const h2 = (c.avrora / max) * (height - pad.t - pad.b);
-      return `
-        <rect x="${x + 6}" y="${height - pad.b - h1}" width="${groupW / 3}" height="${h1}" fill="#c45c26" rx="3"></rect>
-        <rect x="${x + 10 + groupW / 3}" y="${height - pad.b - h2}" width="${groupW / 3}" height="${h2}" fill="#3f7a6b" rx="3"></rect>
-        <text x="${x + groupW / 2}" y="${height - 12}" font-size="10" text-anchor="middle" fill="#6f645a">${c.label}</text>
-      `;
-    })
-    .join("");
-  const total = feedings.length;
-  if (!total) return `<p class="empty">Когда появятся кормления, здесь будут столбики по дням.</p>`;
-  return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Кормления по дням">${bars}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${width} ${height}">${polylines}</svg>`;
 }
 
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
-function addFeeding(form) {
-  const data = new FormData(form);
-  const type = FEED_TYPES.find((item) => item.id === data.get("type"));
-  const minutes = Number(data.get("minutes") || 0);
-  const ml = Number(data.get("ml") || 0);
-  state.feedings.unshift({
-    id: crypto.randomUUID(),
-    childId: data.get("childId"),
-    type: type.id,
-    minutes: type.kind === "breast" && minutes ? minutes : undefined,
-    ml: type.kind === "bottle" && ml ? ml : undefined,
-    note: String(data.get("note") || "").trim(),
-    at: data.get("at") ? new Date(data.get("at")).toISOString() : new Date().toISOString(),
-  });
-  saveState();
-  render();
-}
-
-ui.birth.addEventListener("change", () => {
-  state.birthDate = ui.birth.value;
-  saveState();
-  render();
-});
-
 document.body.addEventListener("click", (event) => {
-  const tabButton = event.target.closest("nav.tabs [data-tab]");
-  if (tabButton) {
-    setTab(tabButton.dataset.tab);
+  const openFeed = event.target.closest("[data-open-feed]");
+  if (openFeed) {
+    feedOpen = true;
+    render();
     return;
   }
-  if (event.target.closest("[data-export]")) {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "dnevnik-devochek.json";
-    link.click();
-    URL.revokeObjectURL(url);
+  if (event.target.closest("[data-close-feed]")) {
+    feedOpen = null;
+    render();
     return;
   }
   const child = event.target.closest("[data-child]");
@@ -515,9 +489,41 @@ document.body.addEventListener("change", (event) => {
 
 document.body.addEventListener("submit", (event) => {
   const form = event.target;
-  if (form.matches("[data-quick-feed], [data-feed-form]")) {
+  if (form.matches("[data-one-feed]")) {
     event.preventDefault();
-    addFeeding(form);
+    const data = new FormData(form);
+    state.feedings.unshift({
+      id: crypto.randomUUID(),
+      childId: data.get("childId"),
+      at: new Date(data.get("at")).toISOString(),
+      kind: data.get("kind"),
+      ml: Number(data.get("ml") || 0),
+      mood: Number(data.get("mood") || 0),
+      slept: data.get("slept") === "on",
+    });
+    feedOpen = null;
+    saveState();
+    render();
+  }
+  if (form.matches("[data-profile]")) {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = form.dataset.profile;
+    state.profiles[id] = {
+      ...state.profiles[id],
+      bornAt: data.get("bornAt"),
+      birthGrams: data.get("birthGrams"),
+      birthHeight: data.get("birthHeight"),
+      height: data.get("height"),
+      headCm: data.get("headCm"),
+      clothes: data.get("clothes"),
+      milkNote: data.get("milkNote"),
+      vitaminD: data.get("vitaminD"),
+      nextVisit: data.get("nextVisit"),
+      notes: data.get("notes"),
+    };
+    saveState();
+    render();
   }
   if (form.matches("[data-weight-form]")) {
     event.preventDefault();
@@ -531,23 +537,6 @@ document.body.addEventListener("submit", (event) => {
     saveState();
     render();
   }
-});
-
-document.querySelector("#import-file").addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    const next = JSON.parse(await file.text());
-    if (!next || !Array.isArray(next.feedings) || !Array.isArray(next.weights)) {
-      throw new Error("bad file");
-    }
-    state = { ...defaultState(), ...next };
-    saveState();
-    render();
-  } catch {
-    alert("Не получилось прочитать файл. Нужен JSON, сохранённый из этого дневника.");
-  }
-  event.target.value = "";
 });
 
 render();

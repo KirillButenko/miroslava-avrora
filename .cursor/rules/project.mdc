@@ -1,0 +1,30 @@
+---
+description: Контекст семейного дневника Мирославы и Авроры
+alwaysApply: true
+---
+
+# Проект
+
+Локальная папка: `/Users/kirillbutenko/Desktop/Pet_1`
+Репозиторий: https://github.com/KirillButenko/miroslava-avrora
+Сайт: https://kirillbutenko.github.io/miroslava-avrora/
+Владелец: Кирилл. Сайтом пользуются он и жена.
+
+# Девочки
+
+- Мирослава: рождение 29.09.2026 10:38, цвет светло-бежевый (`--mira #f3e6d4`)
+- Аврора: рождение 29.09.2026 10:39, цвет светло-розовый (`--avrora #f8dde4`)
+
+# Стек
+
+Статика: `index.html`, `styles.css`, `app.js`. Без фреймворков и бэкенда в репозитории.
+Данные: таблица `public.diary` в Supabase (`id=1`, поле `payload` jsonb).
+URL базы: `https://sinwpqyjjsocceybwbsq.supabase.co`
+Клиентский ключ уже в `app.js` (`sb_publishable_…`). `service_role` не использовать и не писать в код.
+Кэш браузера: `localStorage` ключ `pet1-daughters`. После записи идёт sync в Supabase.
+
+# UI
+
+Стартовая: две карточки рядом, одна кнопка «Записать кормление».
+Разделы динамики — `<details>`, закрыты по умолчанию.
+Навигацию «Сегодня / Девочки / Вес…» и шапку с выгрузкой JSON убрали.

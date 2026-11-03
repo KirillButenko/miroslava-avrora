@@ -3,34 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pet_1 — задачи</title>
+    <title>Мирослава и Аврора</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app">
-      <header class="header">
-        <p class="eyebrow">Pet_1</p>
-        <h1>Мои задачи</h1>
-        <p class="subtitle">Добавляй дела, отмечай готовые — список сохранится в браузере.</p>
+    <div class="page">
+      <header class="hero">
+        <p class="eyebrow">Семейный дневник</p>
+        <h1>Мирослава и Аврора</h1>
+        <p class="lede">
+          Вес, каждое кормление и этапы месяца. Всё остаётся в этом браузере.
+        </p>
+        <div class="hero-actions">
+          <label class="birth">
+            Дата рождения
+            <input id="birth-date" type="date" required />
+          </label>
+          <div class="share">
+            <button type="button" class="btn" data-export>Скачать данные</button>
+            <label class="btn">
+              Загрузить данные
+              <input id="import-file" class="sr-only" type="file" accept="application/json" />
+            </label>
+          </div>
+        </div>
       </header>
 
-      <form id="task-form" class="task-form" autocomplete="off">
-        <label class="sr-only" for="task-input">Новая задача</label>
-        <input
-          id="task-input"
-          name="title"
-          type="text"
-          placeholder="Что нужно сделать?"
-          maxlength="120"
-          required
-        />
-        <button type="submit">Добавить</button>
-      </form>
+      <nav class="tabs" aria-label="Разделы">
+        <button type="button" class="tab is-active" data-tab="today">Сегодня</button>
+        <button type="button" class="tab" data-tab="feedings">Кормления</button>
+        <button type="button" class="tab" data-tab="weight">Вес</button>
+        <button type="button" class="tab" data-tab="stages">Этапы</button>
+        <button type="button" class="tab" data-tab="charts">Графики</button>
+      </nav>
 
-      <p id="status" class="status" aria-live="polite"></p>
-      <ul id="task-list" class="task-list"></ul>
-    </main>
-
+      <section id="panel-today" class="panel is-active"></section>
+      <section id="panel-feedings" class="panel" hidden></section>
+      <section id="panel-weight" class="panel" hidden></section>
+      <section id="panel-stages" class="panel" hidden></section>
+      <section id="panel-charts" class="panel" hidden></section>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>

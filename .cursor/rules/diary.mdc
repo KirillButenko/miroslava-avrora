@@ -1,0 +1,35 @@
+---
+description: Дневник близнецов — контекст и экономия токенов
+alwaysApply: true
+---
+
+# Дневник
+
+Семья Кирилла. Статика: `index.html`, `styles.css`, `app.js`. Без фреймворков.
+Supabase `diary id=1`, ключ уже в `app.js`. `service_role` не использовать.
+localStorage `pet1-daughters`. После записи — sync.
+Мирослава / Аврора, 29.09.2026 10:38 / 10:39, `--mira` / `--avrora`.
+Кормления: 8 раз в сутки, часы 01, 04, 07, 10, 13, 16, 19, 22. Пустые слоты с 01.11.2026 — `ensureSchedule`. Ближайший час — `nearestHour`.
+Экран: две карточки (нажатие — показатели), кнопка «Записать кормление», `<details>` динамики, истории веса, календаря и истории кормлений.
+Локально: `python3 -m http.server 8765`.
+
+## Куда править
+
+- кормление: `renderToday`, `lastFeed`
+- история кормлений: `feedHistory`, слоты: `ensureSchedule`
+- история веса: `weightHistory` (стул: есть/нет), пропуски: `ensureDailyWeights`
+- карточка: `cardForm`, `profileLine`, вес и прибавка за 7 дней: `weightTrend`, дни до следующей тысячи: `weightPace`, мл на кормление (вес ÷ 5 ÷ 8): `feedPortionLine`, возраст: `ageText`, скорр. от ПДР 09.11.2026: `correctedAgeText`
+- график 14 дней: `dynamicsChart`
+- календарь: `calendarBlock`, дела: `state.tasks`, ссылка в Google: `googleCalendarUrl`
+- sync: `syncShared`, `mergeState`
+- цвета: `styles.css` `:root`, `.girl-card`
+
+Grep имя функции, Read ~80 строк. Не читай `app.js` целиком.
+Фича: `.cursor/skills/diary-feature/SKILL.md`.
+Выложить: `diary-publish`. Посмотреть: `diary-verify`. Оба — только по явной просьбе.
+
+## Как работать
+
+Делай только то, что попросили. Без соседнего рефакторинга, README и тестов.
+Не открывай браузер и не публикуй, пока не попросили. Хуки спросят подтверждение.
+Не запускай субагентов. Ответ короткий: что изменилось и где смотреть.

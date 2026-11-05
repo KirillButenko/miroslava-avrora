@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeMCPExecution": [
+      {
+        "command": ".cursor/hooks/gate-mcp.py",
+        "failClosed": true
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/gate-shell.py",
+        "matcher": "git |gh "
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": ".cursor/hooks/gate-subagent.py",
+        "matcher": "generalPurpose|explore|best-of-n-runner|ci-investigator"
+      }
+    ]
+  }
+}

@@ -19,7 +19,7 @@ localStorage `pet1-daughters`. После записи — sync.
 - карточка: `cardForm`, `profileLine` (рост и голова), витамин D и осмотр: `careLine`, вес и прибавка за 7 дней: `weightTrend`, дни до следующей тысячи: `weightPace`, мл на 8 кормлений (вес ÷ 5 ÷ 8): `feedPortionLine`, возраст: `ageText`, скорр. от ПДР 09.11.2026: `correctedAgeText`
 - график веса 14 дней: `dynamicsChart`
 - календарь: `calendarBlock`, дела: `state.tasks`, ссылка в Google: `googleCalendarUrl`
-- навыки: `skillsChart`, окна `SKILLS` (текст Монтессори в `montessori`), нажатие `data-skill` → карточка `skillOpen`, переключатель `skillsMode` (`data-skills-age`): обычный от рождения, скорректированный от ПДР
+- навыки: `skillsChart`, окна `SKILLS` (текст Монтессори в `montessori`), слева срок `from`–`to` мес., нажатие `data-skill` → карточка `skillOpen`, прокрутка диаграммы `ganttScroll`, переключатель `skillsMode` (`data-skills-age`): обычный от рождения, скорректированный от ПДР
 - натальные карты: `natalCharts`, колесо `natalWheel`, текст `natalReading`, данные `NATAL` (29.09.2026, Москва, Плацид)
 - с 22:00 МСК, если за сегодня нет ручного веса: `weightReminder` (одна девочка — её имя, обе — «девочек»)
 - sync: `syncShared`, `mergeState`

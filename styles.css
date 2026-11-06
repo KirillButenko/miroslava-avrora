@@ -742,24 +742,25 @@ textarea {
   margin: 4px 0 10px;
 }
 
-.gantt-wrap {
-  overflow-x: auto;
+.gantt {
   margin-top: 8px;
-  container-type: inline-size;
 }
 
-.gantt-row,
+.gantt-line,
 .gantt-axis {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.gantt-row {
-  width: 100%;
+.gantt-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 248px;
   min-height: 28px;
   margin: 0;
-  padding: 0;
+  padding: 4px 8px 4px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -768,10 +769,15 @@ textarea {
   cursor: pointer;
 }
 
+.gantt-when {
+  flex: 0 0 72px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .skill-card {
-  position: sticky;
-  left: 0;
-  width: 100cqi;
   box-sizing: border-box;
   margin: 2px 0 10px;
   padding: 10px 12px;
@@ -795,34 +801,47 @@ textarea {
   font-weight: 700;
 }
 
-.gantt-name,
 .gantt-axis-pad {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  flex: 0 0 228px;
-  background: var(--paper);
+  flex: 0 0 248px;
 }
 
 .gantt-name {
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  padding: 4px 12px 4px 0;
+  flex: 1;
+  min-width: 0;
   color: var(--accent);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
+}
+
+.gantt-clip {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.gantt-clip::-webkit-scrollbar {
+  display: none;
+}
+
+.gantt-axis .gantt-clip {
+  scrollbar-width: thin;
+}
+
+.gantt-axis .gantt-clip::-webkit-scrollbar {
+  display: block;
+  height: 8px;
 }
 
 .gantt-track,
 .gantt-axis .chart-days {
-  flex: 0 0 720px;
   width: 720px;
 }
 
 .gantt-track {
   position: relative;
+  cursor: pointer;
   height: 14px;
   border-radius: 7px;
   background: #f6f1ea;
@@ -1042,5 +1061,20 @@ textarea {
 
   .panel {
     padding: 18px;
+  }
+
+  .gantt-label,
+  .gantt-axis-pad {
+    flex-basis: 156px;
+    gap: 4px;
+  }
+
+  .gantt-when {
+    flex-basis: 58px;
+    font-size: 12px;
+  }
+
+  .gantt-name {
+    font-size: 14px;
   }
 }

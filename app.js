@@ -390,8 +390,9 @@ function skillsChart() {
     ticks.push({ at: new Date(cursor), label: names[cursor.getMonth()] + yearBit });
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   }
-  const now = pct(today).toFixed(2);
-  const rows = SKILLS.map((skill, index) => {
+    const now = pct(today).toFixed(2);
+    const months = (skill) => `${skill.from}–${skill.to} мес.`;
+    const rows = SKILLS.map((skill, index) => {
     const start = addMonths(origin, skill.from);
     const stop = addMonths(origin, skill.to);
     const left = pct(start);
@@ -412,13 +413,18 @@ function skillsChart() {
       .join("");
     return `
       <div class="gantt-skill">
-        <button type="button" class="gantt-row" data-skill="${index}" aria-expanded="${open ? "true" : "false"}">
-          <span class="gantt-name">${escapeHtml(skill.name)}</span>
-          <span class="gantt-track">
-            <i class="gantt-bar ${tone}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i>
-            <i class="gantt-now" style="left:${now}%"></i>
-          </span>
-        </button>
+        <div class="gantt-line">
+          <button type="button" class="gantt-label" data-skill="${index}" aria-expanded="${open ? "true" : "false"}">
+            <span class="gantt-when">${months(skill)}</span>
+            <span class="gantt-name">${escapeHtml(skill.name)}</span>
+          </button>
+          <div class="gantt-clip">
+            <div class="gantt-track" data-skill="${index}">
+              <i class="gantt-bar ${tone}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i>
+              <i class="gantt-now" style="left:${now}%"></i>
+            </div>
+          </div>
+        </div>
         ${open ? `<div class="skill-card"><p class="skill-hint">${hint}</p><p class="skill-school">Монтессори</p>${montessori}</div>` : ""}
       </div>`;
   }).join("");
@@ -437,11 +443,11 @@ function skillsChart() {
       <span><i class="dot gantt-dot now"></i>сейчас</span>
       <span><i class="dot gantt-dot past"></i>срок прошёл</span>
     </p>
-    <div class="gantt-wrap">
-      <div class="gantt">
-        ${rows}
-        <div class="gantt-axis">
-          <div class="gantt-axis-pad"></div>
+    <div class="gantt">
+      ${rows}
+      <div class="gantt-axis">
+        <div class="gantt-axis-pad"></div>
+        <div class="gantt-clip">
           <div class="chart-days">${axis}</div>
         </div>
       </div>
@@ -1233,9 +1239,29 @@ function natalReading() {
     </div>`;
 }
 
+let ganttScroll = 0;
+let skillPin = null;
+let holdScroll = null;
+
+function mountGantt() {
+  const clips = [...panelToday.querySelectorAll(".gantt-clip")];
+  clips.forEach((clip) => {
+    clip.scrollLeft = ganttScroll;
+    clip.onscroll = () => {
+      if (Math.abs(clip.scrollLeft - ganttScroll) < 1) return;
+      ganttScroll = clip.scrollLeft;
+      clips.forEach((other) => {
+        if (other !== clip) other.scrollLeft = ganttScroll;
+      });
+    };
+  });
+}
+
 function renderToday() {
   const weighed = ensureDailyWeights(state);
   if (weighed) saveState();
+  const scrollY = holdScroll ?? window.scrollY;
+  holdScroll = null;
   panelToday.innerHTML = `
     ${weightReminder()}
     <div class="grid home-grid">
@@ -1281,7 +1307,22 @@ function renderToday() {
     </details>
     ${cardOpen ? cardForm(cardOpen) : ""}
   `;
+  mountGantt();
+  const keep = () => {
+    if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+  };
+  keep();
+  requestAnimationFrame(keep);
 }
+
+document.body.addEventListener(
+  "pointerdown",
+  (event) => {
+    const skill = event.target.closest?.("[data-skill]");
+    skillPin = skill ? window.scrollY : null;
+  },
+  true
+);
 
 document.body.addEventListener("click", (event) => {
   if (event.target.closest("[data-close-card]")) {
@@ -1324,6 +1365,7 @@ document.body.addEventListener("click", (event) => {
     const index = Number(skillBtn.dataset.skill);
     skillOpen = skillOpen === index ? null : index;
     skillsOpen = true;
+    holdScroll = skillPin;
     renderToday();
     return;
   }

@@ -9,18 +9,18 @@ alwaysApply: true
 Supabase `diary id=1`, ключ уже в `app.js`. `service_role` не использовать.
 localStorage `pet1-daughters`. После записи — sync.
 Мирослава / Аврора, 29.09.2026 10:38 / 10:39, `--mira` / `--avrora`.
-Кормления: 8 раз в сутки, часы 01, 04, 07, 10, 13, 16, 19, 22. Пустые слоты с 01.11.2026 — `ensureSchedule`. Ближайший час — `nearestHour`.
-Экран: две карточки (нажатие — показатели), кнопка «Записать кормление», `<details>` динамики, истории веса, календаря и истории кормлений.
+Кормления не ведём. На карточке только расчёт: вес ÷ 5 ÷ 8, строка «8 кормлений: по N мл» — `feedPortionLine`.
+Экран: две карточки (нажатие — показатели), `<details>` динамики веса, истории веса, календаря и навыков.
 Локально: `python3 -m http.server 8765`.
 
 ## Куда править
 
-- кормление: `renderToday`, `lastFeed`
-- история кормлений: `feedHistory`, слоты: `ensureSchedule`
-- история веса: `weightHistory` (стул: есть/нет), пропуски: `ensureDailyWeights`
-- карточка: `cardForm`, `profileLine`, вес и прибавка за 7 дней: `weightTrend`, дни до следующей тысячи: `weightPace`, мл на кормление (вес ÷ 5 ÷ 8): `feedPortionLine`, возраст: `ageText`, скорр. от ПДР 09.11.2026: `correctedAgeText`
-- график 14 дней: `dynamicsChart`
+- история веса: `weightHistory`, таблица: `weightTable` (по 5 на страницу, номера `data-weight-page`), новая строка: форма `data-weight-add` (дата — сегодня), пропуски: `ensureDailyWeights`
+- карточка: `cardForm`, `profileLine` (рост и голова), витамин D и осмотр: `careLine`, вес и прибавка за 7 дней: `weightTrend`, дни до следующей тысячи: `weightPace`, мл на 8 кормлений (вес ÷ 5 ÷ 8): `feedPortionLine`, возраст: `ageText`, скорр. от ПДР 09.11.2026: `correctedAgeText`
+- график веса 14 дней: `dynamicsChart`
 - календарь: `calendarBlock`, дела: `state.tasks`, ссылка в Google: `googleCalendarUrl`
+- навыки: `skillsChart`, окна `SKILLS`, переключатель `skillsMode` (`data-skills-age`): обычный от рождения, скорректированный от ПДР
+- с 22:00 МСК, если за сегодня нет ручного веса: `weightReminder` (одна девочка — её имя, обе — «девочек»)
 - sync: `syncShared`, `mergeState`
 - цвета: `styles.css` `:root`, `.girl-card`
 

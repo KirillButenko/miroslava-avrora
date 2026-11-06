@@ -4,35 +4,52 @@ const CHILDREN = [
   { id: "avrora", name: "Аврора", color: "#e8a0b0", bornAt: "2026-09-29T10:39" },
 ];
 const DUE_DATE = "2026-11-09";
-const FEED_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
-const FEED_START = "2026-11-01";
+const SKILLS = [
+  { name: "Успокаивается на руках", from: 0, to: 2 },
+  { name: "Смотрит на лицо", from: 0, to: 2 },
+  { name: "Улыбается в ответ", from: 1, to: 2 },
+  { name: "Гулит", from: 1, to: 4 },
+  { name: "Держит голову без опоры", from: 2, to: 4 },
+  { name: "Смеётся", from: 3, to: 6 },
+  { name: "Переворачивается на спину", from: 4, to: 6 },
+  { name: "Сидит без опоры", from: 6, to: 9 },
+  { name: "Лепечет «ма-ма», «ба-ба»", from: 6, to: 9 },
+  { name: "Ползает", from: 6, to: 10 },
+  { name: "Встаёт у опоры", from: 8, to: 12 },
+  { name: "Берёт крошку двумя пальцами", from: 8, to: 12 },
+  { name: "Машет «пока»", from: 9, to: 12 },
+  { name: "Ходит вдоль опоры", from: 9, to: 12 },
+  { name: "Первые шаги сам", from: 11, to: 15 },
+  { name: "Слова кроме «мама» и «папа»", from: 12, to: 15 },
+];
 const WEIGHT_SHEET = 2;
 const NOTEBOOK_WEIGHTS = [
-  ["2026-10-18", 2060, false, 2740, false],
-  ["2026-10-19", 2065, true, 2850, false],
-  ["2026-10-20", 2040, false, 2935, false],
-  ["2026-10-21", 2105, null, 2880, null],
-  ["2026-10-23", 2210, null, 3000, null],
-  ["2026-10-24", 2330, false, 2920, false],
-  ["2026-10-25", 2280, true, 2950, true],
-  ["2026-10-27", 2350, false, 3140, true],
-  ["2026-10-28", 2350, true, 3100, true],
-  ["2026-10-29", 2440, false, 3190, true],
-  ["2026-10-30", 2446, false, 3290, true],
-  ["2026-11-01", 2520, false, 3430, true],
-  ["2026-11-03", 2640, false, 3510, false],
-  ["2026-11-04", 2700, true, 3580, true],
-  ["2026-11-05", 2800, false, 3660, false],
+  ["2026-10-18", 2060, 2740],
+  ["2026-10-19", 2065, 2850],
+  ["2026-10-20", 2040, 2935],
+  ["2026-10-21", 2105, 2880],
+  ["2026-10-23", 2210, 3000],
+  ["2026-10-24", 2330, 2920],
+  ["2026-10-25", 2280, 2950],
+  ["2026-10-27", 2350, 3140],
+  ["2026-10-28", 2350, 3100],
+  ["2026-10-29", 2440, 3190],
+  ["2026-10-30", 2446, 3290],
+  ["2026-11-01", 2520, 3430],
+  ["2026-11-03", 2640, 3510],
+  ["2026-11-04", 2700, 3580],
+  ["2026-11-05", 2800, 3660],
 ];
 
 const panelToday = document.querySelector("#panel-today");
 
 let state = loadState();
-let feedOpen = null;
 let cardOpen = null;
-let historyOpen = false;
 let weightHistoryOpen = false;
+let weightPage = {};
 let calendarOpen = false;
+let skillsOpen = false;
+let skillsMode = "corrected";
 let calendarMonth = dayKey(new Date()).slice(0, 7);
 let calendarDay = dayKey(new Date());
 
@@ -79,9 +96,8 @@ function loadState() {
   } catch {
     /* оставляем пустое состояние */
   }
-  const scheduled = ensureSchedule(base);
   const weighed = ensureDailyWeights(base);
-  if (scheduled || weighed) localStorage.setItem(STORAGE_KEY, JSON.stringify(base));
+  if (weighed) localStorage.setItem(STORAGE_KEY, JSON.stringify(base));
   return base;
 }
 
@@ -94,7 +110,7 @@ const dbHeaders = {
 };
 let syncing = false;
 let syncAgain = false;
-let syncNote = "Подключаю базу…";
+let syncNote = "";
 
 async function pullCloud() {
   const res = await fetch(`${DB_URL}?id=eq.1&select=payload`, { headers: dbHeaders });
@@ -129,16 +145,7 @@ function mergeState(local, remote) {
     }
     return [...map.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
   };
-  const feeds = new Map();
-  for (const item of [...(remote?.feedings || []), ...(local.feedings || [])]) {
-    if (!item?.id) continue;
-    const key = feedingSlot(item);
-    const prev = feeds.get(key);
-    if (!prev || (recordedFeed(item) && !recordedFeed(prev))) feeds.set(key, item);
-    else if (recordedFeed(prev) && !recordedFeed(item)) feeds.set(key, prev);
-    else feeds.set(key, item);
-  }
-  base.feedings = [...feeds.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  base.feedings = union(local.feedings, remote?.feedings);
   base.weights = union(local.weights, remote?.weights);
   base.tasks = union(local.tasks, remote?.tasks);
   base.stages = { ...(remote?.stages || {}), ...(local.stages || {}) };
@@ -149,7 +156,6 @@ function mergeState(local, remote) {
     for (const key of Object.keys(profile)) profile[key] = fromLocal[key] || fromRemote[key] || profile[key];
     base.profiles[child.id] = profile;
   }
-  ensureSchedule(base);
   ensureDailyWeights(base);
   return base;
 }
@@ -167,11 +173,11 @@ async function syncShared() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       await pushCloud(state);
     } while (syncAgain);
-    syncNote = "База подключена";
-    if (!feedOpen && !cardOpen && !historyBusy()) renderToday();
+    syncNote = "";
+    if (!cardOpen && !historyBusy()) renderToday();
   } catch {
     syncNote = "Связи нет: пока только этот телефон";
-    if (!feedOpen && !cardOpen && !historyBusy()) renderToday();
+    if (!cardOpen && !historyBusy()) renderToday();
   } finally {
     syncing = false;
   }
@@ -201,6 +207,83 @@ function daysFromDue() {
   return Math.round((today - due) / 86400000);
 }
 
+function birthDay() {
+  const raw = state.profiles.miroslava?.bornAt || CHILDREN[0].bornAt;
+  return slotDate(String(raw).slice(0, 10), 0);
+}
+
+function skillsOrigin() {
+  if (skillsMode === "corrected") {
+    const [year, month, date] = DUE_DATE.split("-").map(Number);
+    return new Date(year, month - 1, date);
+  }
+  return birthDay();
+}
+
+function addMonths(date, months) {
+  const whole = Math.floor(months);
+  const fraction = months - whole;
+  const next = new Date(date.getFullYear(), date.getMonth() + whole, date.getDate());
+  if (fraction) next.setDate(next.getDate() + Math.round(fraction * 30.4375));
+  return next;
+}
+
+function skillsChart() {
+  const born = birthDay();
+  const origin = skillsOrigin();
+  const end = addMonths(origin, 15.5);
+  const span = end - born || 1;
+  const pct = (date) => Math.min(100, Math.max(0, ((date - born) / span) * 100));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const names = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+  const ticks = [{ at: born, label: `${born.getDate()} ${names[born.getMonth()]}` }];
+  let cursor = new Date(born.getFullYear(), born.getMonth() + 1, 1);
+  while (cursor < end) {
+    const yearBit = cursor.getMonth() === 0 ? ` ${String(cursor.getFullYear()).slice(2)}` : "";
+    ticks.push({ at: new Date(cursor), label: names[cursor.getMonth()] + yearBit });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  const now = pct(today).toFixed(2);
+  const rows = SKILLS.map((skill) => {
+    const start = addMonths(origin, skill.from);
+    const stop = addMonths(origin, skill.to);
+    const left = pct(start);
+    const width = Math.max(pct(stop) - left, 0.6);
+    const tone = today >= stop ? "past" : today >= start ? "now" : "later";
+    return `
+      <div class="gantt-row">
+        <span class="gantt-name">${escapeHtml(skill.name)}</span>
+        <div class="gantt-track">
+          <i class="gantt-bar ${tone}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i>
+          <i class="gantt-now" style="left:${now}%"></i>
+        </div>
+      </div>`;
+  }).join("");
+  const axis = ticks
+    .map((tick) => `<span style="left:${pct(tick.at).toFixed(2)}%">${tick.label}</span>`)
+    .join("");
+  const from = skillsMode === "corrected" ? "от ПДР 9 ноября" : "от рождения 29 сентября";
+  return `
+    <div class="skills-switch" role="group" aria-label="Как считать возраст">
+      <button type="button" class="btn ${skillsMode === "chrono" ? "primary" : ""}" data-skills-age="chrono">Обычный возраст</button>
+      <button type="button" class="btn ${skillsMode === "corrected" ? "primary" : ""}" data-skills-age="corrected">Скорректированный</button>
+    </div>
+    <p class="muted">Полоса — когда навык обычно появляется, правый край — к какому возрасту он есть у большинства. Сейчас окна ${from}. Чёрная линия — сегодня. Для недоношенных до двух лет смотрят скорректированный возраст. Ползание бывает не у всех.</p>
+    <p class="legend">
+      <span><i class="dot gantt-dot later"></i>ещё рано</span>
+      <span><i class="dot gantt-dot now"></i>окно сейчас</span>
+      <span><i class="dot gantt-dot past"></i>окно прошло</span>
+    </p>
+    <div class="gantt-wrap">
+      <div class="gantt">
+        ${rows}
+        <div class="gantt-axis chart-days">${axis}</div>
+      </div>
+    </div>
+  `;
+}
+
 function correctedAgeText() {
   const days = daysFromDue();
   if (days < 0) return `−${-days} дн.`;
@@ -211,85 +294,10 @@ function correctedAgeText() {
   return `${months} мес. ${rest} дн.`;
 }
 
-function recordedFeed(item) {
-  if (!item) return false;
-  if (item.kind === "milk" || item.kind === "formula") return true;
-  return item.ml !== "" && item.ml != null && !Number.isNaN(Number(item.ml));
-}
-
 function slotDate(day, hour) {
   const [year, month, date] = String(day).split("-").map(Number);
   const next = new Date(year, month - 1, date, Number(hour), 0, 0, 0);
   return Number.isNaN(next.getTime()) ? null : next;
-}
-
-function scheduleKey(item) {
-  const date = new Date(item?.at);
-  if (!item?.childId || Number.isNaN(date.getTime()) || !FEED_HOURS.includes(date.getHours())) return "";
-  return `${item.childId}|${dayKey(date)}|${date.getHours()}`;
-}
-
-function feedingSlot(item) {
-  const date = new Date(item?.at);
-  if (!item?.childId || Number.isNaN(date.getTime())) return item?.id || "";
-  if (date.getMinutes() || date.getSeconds()) return item.id;
-  return scheduleKey(item) || item.id;
-}
-
-function nearestHour(date = new Date()) {
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  let best = FEED_HOURS[0];
-  let bestDist = Infinity;
-  for (const hour of FEED_HOURS) {
-    const dist = Math.abs(hour * 60 - minutes);
-    if (dist < bestDist || (dist === bestDist && hour > best)) {
-      best = hour;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
-
-function hourSelect(selected) {
-  const hour = Number(selected);
-  const hours = FEED_HOURS.includes(hour) ? FEED_HOURS : [...FEED_HOURS, hour].sort((a, b) => a - b);
-  return hours
-    .map((value) => {
-      const label = String(value).padStart(2, "0");
-      return `<option value="${value}" ${value === hour ? "selected" : ""}>${label}</option>`;
-    })
-    .join("");
-}
-
-function ensureSchedule(data) {
-  const today = dayKey(new Date());
-  if (today < FEED_START) return false;
-  const taken = new Set(data.feedings.map((item) => scheduleKey(item)).filter(Boolean));
-  let added = false;
-  const cursor = slotDate(FEED_START, 0);
-  const end = slotDate(today, 0);
-  while (cursor <= end) {
-    const day = dayKey(cursor);
-    for (const child of CHILDREN) {
-      for (const hour of FEED_HOURS) {
-        const key = `${child.id}|${day}|${hour}`;
-        if (taken.has(key)) continue;
-        data.feedings.push({
-          id: `${child.id}-${day}-${String(hour).padStart(2, "0")}`,
-          childId: child.id,
-          at: slotDate(day, hour).toISOString(),
-          kind: "",
-          ml: "",
-          mood: "",
-          slept: null,
-        });
-        taken.add(key);
-        added = true;
-      }
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return added;
 }
 
 function daysBetween(start, end) {
@@ -307,19 +315,23 @@ function daysBetween(start, end) {
 
 function ensureDailyWeights(data) {
   let changed = false;
-  for (const [day, avroraGrams, avroraStool, miraGrams, miraStool] of NOTEBOOK_WEIGHTS) {
+  for (const item of data.weights) {
+    if (!Object.hasOwn(item, "stool")) continue;
+    delete item.stool;
+    changed = true;
+  }
+  for (const [day, avroraGrams, miraGrams] of NOTEBOOK_WEIGHTS) {
     const byChild = {
-      avrora: [avroraGrams, avroraStool],
-      miroslava: [miraGrams, miraStool],
+      avrora: avroraGrams,
+      miroslava: miraGrams,
     };
     for (const child of CHILDREN) {
-      const [grams, stool] = byChild[child.id];
+      const grams = byChild[child.id];
       const id = `notebook-${child.id}-${day}`;
       const item = data.weights.find((row) => row.id === id);
       if (item) {
         if (item.sheet !== WEIGHT_SHEET) {
           item.grams = grams;
-          item.stool = stool;
           item.auto = false;
           item.sheet = WEIGHT_SHEET;
           if (dayKey(item.at) !== day) item.at = slotDate(day, 12).toISOString();
@@ -335,7 +347,6 @@ function ensureDailyWeights(data) {
         id,
         childId: child.id,
         grams,
-        stool,
         sheet: WEIGHT_SHEET,
         at: slotDate(day, 12).toISOString(),
         auto: false,
@@ -399,15 +410,6 @@ function dayKey(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function formatWhen(iso) {
-  return new Date(iso).toLocaleString("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -427,97 +429,35 @@ function latestWeight(childId) {
 
 function profileLine(childId) {
   const profile = state.profiles[childId];
-  const weight = latestWeight(childId);
   const bits = [
-    weight ? `${weight.grams} г${weight.auto ? " · расчёт" : ""}` : "",
     profile.height ? `рост ${profile.height} см` : "",
     profile.headCm ? `голова ${profile.headCm} см` : "",
   ].filter(Boolean);
   return bits.join(" · ");
 }
 
-function lastFeed(childId) {
-  let best = null;
-  for (const item of state.feedings) {
-    if (item.childId !== childId || !recordedFeed(item)) continue;
-    if (!best || item.at > best.at) best = item;
-  }
-  return best;
+function formatDayKey(key) {
+  const date = slotDate(key, 12);
+  if (!date) return "";
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-function feedBlock(feed) {
-  if (!feed) return `<p class="feed-empty">Ещё не записывали</p>`;
-  const kind = feed.kind === "formula" ? "Смесь" : feed.kind === "milk" ? "Молоко" : "";
-  const bits = [
-    kind,
-    feed.ml != null ? `${feed.ml} мл` : "",
-    feed.mood ? `настроение ${feed.mood}/10` : "",
-    feed.slept === true ? "спала" : feed.slept === false ? "не спала" : "",
-  ].filter(Boolean);
-  return `<p class="feed-when">${formatWhen(feed.at)}</p><p class="feed-meta">${bits.map((bit) => `<span>${bit}</span>`).join("")}</p>`;
+function careLine(childId) {
+  const profile = state.profiles[childId];
+  const bits = [];
+  if (profile.vitaminD) bits.push(`витамин D: ${escapeHtml(profile.vitaminD)}`);
+  if (profile.nextVisit) bits.push(`осмотр ${formatDayKey(profile.nextVisit)}`);
+  if (!bits.length) return "";
+  return `<p class="stats">${bits.join(" · ")}</p>`;
 }
 
 function historyBusy() {
   const el = document.activeElement;
-  return Boolean(
-    el &&
-      el.closest &&
-      (el.closest("[data-feed-edit]") || el.closest("[data-weight-edit]") || el.closest("[data-cal-add]"))
-  );
+  return Boolean(el && el.closest && (el.closest("[data-weight-edit]") || el.closest("[data-weight-add]") || el.closest("[data-cal-add]")));
 }
 
-function feedHistory() {
-  const rows = [...state.feedings].sort((a, b) => String(b.at).localeCompare(String(a.at)));
-  if (!rows.length) return `<p class="empty">Пока нет кормлений.</p>`;
-  return `
-    <div class="history-wrap">
-      <table class="history">
-        <thead>
-          <tr>
-            <th>Кто</th>
-            <th>Дата</th>
-            <th>Час</th>
-            <th>Еда</th>
-            <th>Мл</th>
-            <th>Настроение</th>
-            <th>Спала</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows
-            .map((feed) => {
-              const id = escapeHtml(feed.id);
-              const date = new Date(feed.at);
-              const valid = !Number.isNaN(date.getTime());
-              return `
-                <tr>
-                  <td><select data-feed-edit="childId" data-feed-id="${id}" aria-label="Кто">${childSelect(feed.childId)}</select></td>
-                  <td class="day"><input data-feed-edit="day" data-feed-id="${id}" type="date" value="${valid ? dayKey(date) : ""}" aria-label="Дата" /></td>
-                  <td class="hour"><select data-feed-edit="hour" data-feed-id="${id}" aria-label="Час">${hourSelect(valid ? date.getHours() : nearestHour())}</select></td>
-                  <td>
-                    <select data-feed-edit="kind" data-feed-id="${id}" aria-label="Еда">
-                      <option value="" ${feed.kind !== "milk" && feed.kind !== "formula" ? "selected" : ""}>—</option>
-                      <option value="milk" ${feed.kind === "milk" ? "selected" : ""}>Молоко</option>
-                      <option value="formula" ${feed.kind === "formula" ? "selected" : ""}>Смесь</option>
-                    </select>
-                  </td>
-                  <td><input data-feed-edit="ml" data-feed-id="${id}" type="number" min="0" max="300" value="${feed.ml ?? ""}" aria-label="Мл" /></td>
-                  <td><input data-feed-edit="mood" data-feed-id="${id}" type="number" min="1" max="10" value="${feed.mood ?? ""}" aria-label="Настроение" /></td>
-                  <td class="slept"><input data-feed-edit="slept" data-feed-id="${id}" type="checkbox" ${feed.slept ? "checked" : ""} aria-label="Спала" /></td>
-                </tr>`;
-            })
-            .join("")}
-        </tbody>
-      </table>
-    </div>`;
-}
-
-function weightHistory() {
-  const rows = [...state.weights].sort((a, b) => {
-    const byAt = String(b.at).localeCompare(String(a.at));
-    return byAt || String(a.childId).localeCompare(String(b.childId));
-  });
-  if (!rows.length) return `<p class="empty">Пока нет взвешиваний.</p>`;
+function weightTable(rows) {
+  if (!rows.length) return "";
   return `
     <div class="history-wrap">
       <table class="history">
@@ -526,7 +466,6 @@ function weightHistory() {
             <th>Кто</th>
             <th>Дата</th>
             <th>Вес, г</th>
-            <th>Стул</th>
           </tr>
         </thead>
         <tbody>
@@ -543,13 +482,6 @@ function weightHistory() {
                     <input data-weight-edit="grams" data-weight-id="${id}" type="number" min="1000" max="12000" step="1" value="${item.grams ?? ""}" aria-label="Вес, г" />
                     ${item.auto ? `<span class="auto-mark">расчёт</span>` : ""}
                   </td>
-                  <td>
-                    <select data-weight-edit="stool" data-weight-id="${id}" aria-label="Стул">
-                      <option value="" ${item.stool == null ? "selected" : ""}>—</option>
-                      <option value="yes" ${item.stool === true ? "selected" : ""}>есть</option>
-                      <option value="no" ${item.stool === false ? "selected" : ""}>нет</option>
-                    </select>
-                  </td>
                 </tr>`;
             })
             .join("")}
@@ -558,34 +490,50 @@ function weightHistory() {
     </div>`;
 }
 
+function weightHistory() {
+  const today = dayKey(new Date());
+  const pageSize = 5;
+  const sections = CHILDREN.map((child) => {
+    const rows = state.weights
+      .filter((item) => item.childId === child.id)
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+    let page = weightPage[child.id] || 0;
+    if (page > pages - 1) page = pages - 1;
+    if (page < 0) page = 0;
+    weightPage[child.id] = page;
+    const slice = rows.slice(page * pageSize, page * pageSize + pageSize);
+    const pager = pages > 1
+      ? `<nav class="weight-pages" aria-label="Страницы, ${child.name}">
+          ${Array.from({ length: pages }, (_, index) => `
+            <button type="button" class="weight-page${index === page ? " is-on" : ""}" data-weight-page="${child.id}" data-page="${index}" ${index === page ? 'aria-current="page"' : ""}>${index + 1}</button>`).join("")}
+        </nav>`
+      : "";
+    const body = rows.length
+      ? `${weightTable(slice)}${pager}`
+      : `<p class="empty">Пока нет взвешиваний.</p>`;
+    return `<section class="weight-girl"><h3>${child.name}</h3>${body}</section>`;
+  }).join("");
+  return `
+    <form class="weight-add" data-weight-add>
+      <label>Кто
+        <select name="childId" aria-label="Кто">${childSelect("miroslava")}</select>
+      </label>
+      <label>Дата
+        <input name="day" type="date" value="${today}" required aria-label="Дата" />
+      </label>
+      <label>Вес, г
+        <input name="grams" type="number" min="1000" max="12000" step="1" required aria-label="Вес, г" />
+      </label>
+      <button class="cal-save" type="submit">Добавить</button>
+    </form>
+    ${sections}`;
+}
+
 function childSelect(selected) {
   return CHILDREN.map(
     (child) => `<option value="${child.id}" ${child.id === selected ? "selected" : ""}>${child.name}</option>`
   ).join("");
-}
-
-function childFeed(item, childId) {
-  return item.childId === childId ? item : null;
-}
-
-function feedShare(childId) {
-  let milk = 0;
-  let formula = 0;
-  for (const item of state.feedings) {
-    const rec = childFeed(item, childId);
-    if (!rec) continue;
-    const ml = Number(rec.ml) || 0;
-    if (rec.kind === "formula") formula += ml;
-    else milk += ml;
-  }
-  const total = milk + formula;
-  return {
-    milk,
-    formula,
-    milkPct: total ? Math.round((milk / total) * 100) : 0,
-    formulaPct: total ? Math.round((formula / total) * 100) : 0,
-    total,
-  };
 }
 
 function recentDays(count) {
@@ -618,28 +566,19 @@ function dynamicsChart() {
       return byDay[key] != null ? byDay[key] : known;
     });
     const first = grams.findIndex((value) => value != null);
-    const ml = keys.map((key) =>
-      state.feedings.reduce((sum, item) => {
-        const rec = childFeed(item, child.id);
-        return rec && dayKey(rec.at) === key ? sum + (Number(rec.ml) || 0) : sum;
-      }, 0)
-    );
-    return { child, grams, ml, first };
+    return { child, grams, first };
   });
   const gramValues = series.flatMap((item) => item.grams.filter((value) => value != null));
-  const mlValues = series.flatMap((item) => item.ml);
-  if (!gramValues.length && mlValues.every((value) => value === 0)) {
-    return `<p class="empty">Пока нет веса и кормлений за 14 дней.</p>`;
+  if (!gramValues.length) {
+    return `<p class="empty">Пока нет веса за 14 дней.</p>`;
   }
   const width = 840;
   const height = 210;
   const pad = { l: 12, r: 12, t: 8, b: 8 };
-  const minG = Math.min(...(gramValues.length ? gramValues : [0])) - 40;
-  const maxG = Math.max(...(gramValues.length ? gramValues : [1])) + 40;
-  const maxM = Math.max(40, ...mlValues);
+  const minG = Math.min(...gramValues) - 40;
+  const maxG = Math.max(...gramValues) + 40;
   const x = (index) => pad.l + (index / (days.length - 1)) * (width - pad.l - pad.r);
   const yG = (value) => height - pad.b - ((value - minG) / (maxG - minG)) * (height - pad.t - pad.b);
-  const yM = (value) => height - pad.b - (value / maxM) * (height - pad.t - pad.b);
   const lines = series
     .map(({ child, grams, first }) => {
       if (first < 0) return "";
@@ -649,18 +588,6 @@ function dynamicsChart() {
         .join(" ");
       return `<polyline fill="none" stroke="${child.color}" stroke-width="3" points="${points}"></polyline>`;
     })
-    .join("");
-  const bars = series
-    .map(({ child, ml }) =>
-      ml
-        .map((value, index) => {
-          if (!value) return "";
-          const barH = height - pad.b - yM(value);
-          const offset = child.id === "miroslava" ? -7 : 1;
-          return `<rect x="${x(index) + offset}" y="${yM(value)}" width="6" height="${barH}" rx="2" fill="${child.color}" opacity="0.35"></rect>`;
-        })
-        .join("")
-    )
     .join("");
   const dayLabels = [0, 4, 8, 13]
     .map((index) => {
@@ -672,32 +599,13 @@ function dynamicsChart() {
     })
     .join("");
   return `<div class="chart-box">
-    <div class="chart-scale"><span>${Math.round(maxG)} г</span><span>${Math.round(maxM)} мл</span></div>
-    <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Вес и миллилитры кормления">
+    <div class="chart-scale"><span>${Math.round(maxG)} г</span></div>
+    <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Вес за 14 дней">
       <line x1="${pad.l}" y1="${height - pad.b}" x2="${width - pad.r}" y2="${height - pad.b}" stroke="#e6d9c8"></line>
-      ${bars}${lines}
+      ${lines}
     </svg>
     <div class="chart-days">${dayLabels}</div>
   </div>`;
-}
-
-function feedShareBlock() {
-  return `<div class="grid">${CHILDREN.map((child) => {
-    const share = feedShare(child.id);
-    const tone = child.id === "miroslava" ? "mira" : "avrora";
-    if (!share.total) {
-      return `<article class="card share-card"><h3>${child.name}</h3><p class="empty">Нет миллилитров.</p></article>`;
-    }
-    return `<article class="card share-card">
-      <h3>${child.name}</h3>
-      <div class="share-bar" aria-label="Молоко ${share.milkPct}%, смесь ${share.formulaPct}%">
-        <span class="${tone} milk" style="width:${share.milkPct}%"></span>
-        <span class="${tone} formula" style="width:${share.formulaPct}%"></span>
-      </div>
-      <p>Молоко ${share.milkPct}% · ${share.milk} мл</p>
-      <p>Смесь ${share.formulaPct}% · ${share.formula} мл</p>
-    </article>`;
-  }).join("")}</div>`;
 }
 
 function weightTrend(childId) {
@@ -731,26 +639,6 @@ function weightFace(delta) {
   const fill = down ? "#d64545" : "#1f9d55";
   const mouth = down ? "M10 22c1.6-3 4-4.5 6-4.5s4.4 1.5 6 4.5" : "M10 18c1.6 3 4 4.5 6 4.5s4.4-1.5 6-4.5";
   return `<svg class="face" viewBox="0 0 32 32" role="img" aria-label="${label}"><circle cx="16" cy="16" r="15" fill="${fill}"></circle><circle cx="11" cy="13" r="2" fill="#fff"></circle><circle cx="21" cy="13" r="2" fill="#fff"></circle><path d="${mouth}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"></path></svg>`;
-}
-
-function weightSpark(child, grams) {
-  const known = grams.filter((value) => value != null);
-  if (known.length < 2) return "";
-  const width = 160;
-  const height = 36;
-  const min = Math.min(...known);
-  const max = Math.max(...known);
-  const span = max - min || 1;
-  const points = grams
-    .map((value, index) => {
-      if (value == null) return "";
-      const x = (index / (grams.length - 1)) * width;
-      const y = height - 3 - ((value - min) / span) * (height - 6);
-      return `${x},${y}`;
-    })
-    .filter(Boolean)
-    .join(" ");
-  return `<svg class="spark" viewBox="0 0 ${width} ${height}" aria-hidden="true"><polyline fill="none" stroke="${child.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${points}"></polyline></svg>`;
 }
 
 function nextThousand(grams) {
@@ -824,7 +712,6 @@ function weightTrendBlock(child) {
     ${delta}
     ${weightGoalLine(child.id)}
     ${feedPortionLine(trend.current.grams)}
-    ${weightSpark(child, trend.grams)}
   </div>`;
 }
 
@@ -859,9 +746,6 @@ function cardForm(childId) {
         </label>
         <label>Размер одежды
           <input name="clothes" value="${escapeHtml(profile.clothes || "")}" placeholder="56 / 62" />
-        </label>
-        <label>Смесь / молоко
-          <input name="milkNote" value="${escapeHtml(profile.milkNote || "")}" placeholder="какая смесь, как ест" />
         </label>
         <label>Витамин D
           <input name="vitaminD" value="${escapeHtml(profile.vitaminD || "")}" placeholder="капля утром" />
@@ -987,13 +871,58 @@ function calendarBlock() {
   `;
 }
 
+function moscowParts(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(date).map((part) => [part.type, part.value]));
+  if (parts.hour === "24") parts.hour = "00";
+  return parts;
+}
+
+function msUntilMoscow(hour) {
+  const parts = moscowParts();
+  const now = Number(parts.hour) * 3600 + Number(parts.minute) * 60 + Number(parts.second);
+  let delta = hour * 3600 - now;
+  if (delta <= 0) delta += 86400;
+  return delta * 1000;
+}
+
+function weightReminder() {
+  const parts = moscowParts();
+  if (Number(parts.hour) < 22) return "";
+  const day = `${parts.year}-${parts.month}-${parts.day}`;
+  const missing = CHILDREN.filter(
+    (child) => !state.weights.some((item) => item.childId === child.id && !item.auto && dayKey(item.at) === day)
+  );
+  if (!missing.length) return "";
+  const date = slotDate(day, 12).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  const who = missing.length === 1
+    ? { miroslava: "Мирославы", avrora: "Авроры" }[missing[0].id]
+    : "девочек";
+  return `<p class="weight-warn" role="status">Вы за ${date} не заполнили вес ${who}.</p>`;
+}
+
+function armWeightReminder() {
+  const wait = Math.min(msUntilMoscow(22), msUntilMoscow(0));
+  setTimeout(() => {
+    if (!historyBusy() && !cardOpen) renderToday();
+    armWeightReminder();
+  }, wait);
+}
+
 function renderToday() {
-  const scheduled = ensureSchedule(state);
   const weighed = ensureDailyWeights(state);
-  if (scheduled || weighed) saveState();
-  const feedDay = dayKey(new Date());
-  const feedHour = nearestHour();
+  if (weighed) saveState();
   panelToday.innerHTML = `
+    ${weightReminder()}
     <div class="grid home-grid">
       ${CHILDREN.map((child) => {
         const profile = state.profiles[child.id];
@@ -1004,21 +933,17 @@ function renderToday() {
             <p class="age">${ageText(profile.bornAt)}</p>
             <p class="age-corrected">скорр. ${correctedAgeText()}</p>
             ${weightTrendBlock(child)}
+            ${careLine(child.id)}
             ${profileLine(child.id) ? `<p class="stats">${profileLine(child.id)}</p>` : ""}
-            <div class="last-feed">
-              <p class="last-feed-label">Последнее кормление</p>
-              ${feedBlock(lastFeed(child.id))}
-            </div>
           </article>
         `;
       }).join("")}
     </div>
-    <button type="button" class="btn primary feed-one" data-open-feed>Записать кормление</button>
-    <p class="sync-note">${syncNote}</p>
+    ${syncNote ? `<p class="sync-note">${syncNote}</p>` : ""}
     <details class="dyn">
-      <summary>Динамика веса и кормления</summary>
+      <summary>Динамика веса</summary>
       <p class="legend">
-        ${CHILDREN.map((child) => `<span><i class="dot" style="background:${child.color}"></i>${child.name}: линия — вес, столбик — мл</span>`).join("")}
+        ${CHILDREN.map((child) => `<span><i class="dot" style="background:${child.color}"></i>${child.name}</span>`).join("")}
       </p>
       ${dynamicsChart()}
     </details>
@@ -1027,76 +952,19 @@ function renderToday() {
       <p class="muted">Пропуск — среднее соседних дней. Несколько дней подряд делятся равномерно. Такие строки помечены «расчёт».</p>
       ${weightHistory()}
     </details>
-    <details class="dyn">
-      <summary>Динамика кормления</summary>
-      <p class="muted">Доля молока и смеси по всем записанным миллилитрам.</p>
-      ${feedShareBlock()}
-    </details>
     <details class="dyn" data-calendar ${calendarOpen ? "open" : ""}>
       <summary>Календарь</summary>
       ${calendarBlock()}
     </details>
-    <details class="dyn" data-history ${historyOpen ? "open" : ""}>
-      <summary>История кормлений</summary>
-      <p class="muted">Все записи, сначала новые. Правка ячейки сохраняется сразу.</p>
-      ${feedHistory()}
+    <details class="dyn" data-skills ${skillsOpen ? "open" : ""}>
+      <summary>Навыки</summary>
+      ${skillsChart()}
     </details>
-    ${
-      feedOpen
-        ? `<div class="overlay">
-            <form class="card feed-modal" data-one-feed>
-              <h2>Кормление</h2>
-              <div class="form">
-                <label>Кто
-                  <select name="childId">${childSelect("miroslava")}</select>
-                </label>
-                <label>Дата
-                  <input name="day" type="date" value="${feedDay}" required />
-                </label>
-                <label>Час
-                  <select name="hour">${hourSelect(feedHour)}</select>
-                </label>
-                <label>Еда
-                  <select name="kind">
-                    <option value="milk">Молоко</option>
-                    <option value="formula">Смесь</option>
-                  </select>
-                </label>
-                <label>Мл
-                  <input name="ml" type="number" min="0" max="300" required />
-                </label>
-                <label>Поведение 1–10
-                  <input name="mood" type="number" min="1" max="10" value="7" required />
-                </label>
-                <label class="check wide">
-                  <input name="slept" type="checkbox" />
-                  Спала между кормлениями
-                </label>
-              </div>
-              <div class="form-actions">
-                <button class="btn primary" type="submit">Сохранить</button>
-                <button class="btn ghost" type="button" data-close-feed>Закрыть</button>
-              </div>
-            </form>
-          </div>`
-        : ""
-    }
     ${cardOpen ? cardForm(cardOpen) : ""}
   `;
 }
 
 document.body.addEventListener("click", (event) => {
-  if (event.target.closest("[data-open-feed]")) {
-    feedOpen = true;
-    cardOpen = null;
-    renderToday();
-    return;
-  }
-  if (event.target.closest("[data-close-feed]")) {
-    feedOpen = null;
-    renderToday();
-    return;
-  }
   if (event.target.closest("[data-close-card]")) {
     cardOpen = null;
     renderToday();
@@ -1125,6 +993,20 @@ document.body.addEventListener("click", (event) => {
     renderToday();
     return;
   }
+  const skillsBtn = event.target.closest("[data-skills-age]");
+  if (skillsBtn) {
+    skillsMode = skillsBtn.dataset.skillsAge === "chrono" ? "chrono" : "corrected";
+    skillsOpen = true;
+    renderToday();
+    return;
+  }
+  const pageBtn = event.target.closest("[data-weight-page]");
+  if (pageBtn) {
+    weightPage[pageBtn.dataset.weightPage] = Number(pageBtn.dataset.page) || 0;
+    weightHistoryOpen = true;
+    renderToday();
+    return;
+  }
   const del = event.target.closest("[data-cal-del]");
   if (del) {
     state.tasks = state.tasks.filter((item) => item.id !== del.dataset.calDel);
@@ -1136,7 +1018,6 @@ document.body.addEventListener("click", (event) => {
   const card = event.target.closest("[data-open-card]");
   if (card && panelToday.contains(card)) {
     cardOpen = card.dataset.openCard;
-    feedOpen = null;
     renderToday();
   }
 });
@@ -1144,32 +1025,12 @@ document.body.addEventListener("click", (event) => {
 document.body.addEventListener(
   "toggle",
   (event) => {
-    if (event.target.matches?.("[data-history]")) historyOpen = event.target.open;
     if (event.target.matches?.("[data-weight-history]")) weightHistoryOpen = event.target.open;
     if (event.target.matches?.("[data-calendar]")) calendarOpen = event.target.open;
+    if (event.target.matches?.("[data-skills]")) skillsOpen = event.target.open;
   },
   true
 );
-
-document.body.addEventListener("change", (event) => {
-  const field = event.target.closest("[data-feed-edit]");
-  if (!field) return;
-  const item = state.feedings.find((feed) => feed.id === field.dataset.feedId);
-  if (!item) return;
-  const key = field.dataset.feedEdit;
-  if (key === "childId" || key === "kind") item[key] = field.value;
-  if (key === "day" || key === "hour") {
-    const row = field.closest("tr");
-    const next = slotDate(row.querySelector('[data-feed-edit="day"]').value, row.querySelector('[data-feed-edit="hour"]').value);
-    if (!next) return;
-    item.at = next.toISOString();
-  }
-  if (key === "ml" || key === "mood") item[key] = field.value === "" ? "" : Number(field.value);
-  if (key === "slept") item.slept = field.checked;
-  historyOpen = true;
-  saveState();
-  renderToday();
-});
 
 document.body.addEventListener("change", (event) => {
   const field = event.target.closest("[data-weight-edit]");
@@ -1190,8 +1051,7 @@ document.body.addEventListener("change", (event) => {
     if (!grams) return;
     item.grams = grams;
   }
-  if (key === "stool") item.stool = field.value === "yes" ? true : field.value === "no" ? false : null;
-  else item.auto = false;
+  item.auto = false;
   weightHistoryOpen = true;
   ensureDailyWeights(state);
   saveState();
@@ -1200,6 +1060,28 @@ document.body.addEventListener("change", (event) => {
 
 document.body.addEventListener("submit", (event) => {
   const form = event.target;
+  if (form.matches("[data-weight-add]")) {
+    event.preventDefault();
+    const data = new FormData(form);
+    const grams = Number(data.get("grams"));
+    const day = String(data.get("day") || "");
+    const childId = String(data.get("childId") || "");
+    const atDate = slotDate(day, new Date().getHours());
+    if (!grams || !atDate || !CHILDREN.some((child) => child.id === childId)) return;
+    state.weights.unshift({
+      id: crypto.randomUUID(),
+      childId,
+      grams,
+      at: atDate.toISOString(),
+      auto: false,
+    });
+    weightHistoryOpen = true;
+    weightPage[childId] = 0;
+    ensureDailyWeights(state);
+    saveState();
+    renderToday();
+    return;
+  }
   if (form.matches("[data-cal-add]")) {
     event.preventDefault();
     const data = new FormData(form);
@@ -1228,7 +1110,6 @@ document.body.addEventListener("submit", (event) => {
       height: data.get("height"),
       headCm: data.get("headCm"),
       clothes: data.get("clothes"),
-      milkNote: data.get("milkNote"),
       vitaminD: data.get("vitaminD"),
       nextVisit: data.get("nextVisit"),
       notes: data.get("notes"),
@@ -1254,30 +1135,11 @@ document.body.addEventListener("submit", (event) => {
     cardOpen = null;
     saveState();
     renderToday();
-    return;
   }
-  if (!form.matches("[data-one-feed]")) return;
-  event.preventDefault();
-  const data = new FormData(form);
-  const atDate = slotDate(data.get("day"), data.get("hour"));
-  if (!atDate) return;
-  const patch = {
-    childId: data.get("childId"),
-    at: atDate.toISOString(),
-    kind: data.get("kind"),
-    ml: Number(data.get("ml") || 0),
-    mood: Number(data.get("mood") || 0),
-    slept: data.get("slept") === "on",
-  };
-  const item = state.feedings.find((feed) => scheduleKey(feed) === `${patch.childId}|${dayKey(atDate)}|${atDate.getHours()}`);
-  if (item) Object.assign(item, patch);
-  else state.feedings.unshift({ id: crypto.randomUUID(), ...patch });
-  feedOpen = null;
-  saveState();
-  renderToday();
 });
 
 renderToday();
+armWeightReminder();
 syncShared();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") syncShared();
